@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+﻿using System;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
@@ -28,11 +28,18 @@ namespace RfbScreenSharing.Client.ViewModels
 			}
 		}
 
+		public string? ServerHost { get; set; }
+
 		public ReactiveCommand<Unit, Unit> StartCommand { get; set; }
 
-		private static async Task<int> RegisterClientAsync()
+		private async Task<int> RegisterClientAsync()
 		{
-			var endpoint = new IPEndPoint(IPAddress.Parse("127.0.0.1"), 1338);
+			if(string.IsNullOrWhiteSpace(ServerHost))
+			{
+				throw new InvalidOperationException("Please enter a server host!");
+			}
+			
+			var endpoint = new IPEndPoint(IPAddress.Parse(ServerHost), 1338);
 			using var registrationEndpoint = new UdpClient();
 
 			// Register this client in the server.

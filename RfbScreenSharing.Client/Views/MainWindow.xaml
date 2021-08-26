@@ -14,12 +14,12 @@
         <vm:MainWindowViewModel />
     </Design.DataContext>
 
-    <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
-        <Image Source="{Binding ImageSource}" Stretch="Fill" Grid.Row="0" />
-        <Button Command="{Binding StartCommand}" Content="Start" Grid.Row="1" />
+    <Grid RowDefinitions="Auto,*,Auto">
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+            <Label Content="Server: " />
+            <TextBox Text="{Binding ServerHost, Mode=OneWayToSource}" MinWidth="200" />
+        </StackPanel>
+        <Image Source="{Binding ImageSource}" Stretch="Fill" Grid.Row="1" />
+        <Button Command="{Binding StartCommand}" Content="Start" Grid.Row="2" />
     </Grid>
 </Window>
