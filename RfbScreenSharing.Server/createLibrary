@@ -1,0 +1,2 @@
+#!/bin/zsh
+gcc -dynamiclib libscreenshot.c -o libscreenshot.dylib -current_version 1.0 -compatibility_version 1.0

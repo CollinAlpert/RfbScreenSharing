@@ -1,58 +1,53 @@
-using System.Diagnostics;
-using System.Runtime.InteropServices;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Engines;
 
-namespace RfbScreenSharing.Server.Tests
+namespace RfbScreenSharing.Server.Tests;
+
+[MemoryDiagnoser]
+public class BenchmarkContainer
 {
-	[MemoryDiagnoser]
-	public class BenchmarkContainer
+	private static readonly byte[] Bytes = new byte[900_000];
+	private static readonly Consumer Consumer = new();
+
+	[GlobalSetup]
+	public void Setup()
 	{
-		/*[GlobalSetup]
-		public void Setup()
-		{
-		}*/
+		Random.Shared.NextBytes(Bytes);
+	}
 
-		[Benchmark(Baseline = true)]
-		public void Benchmark()
+	[Benchmark(Baseline = true)]
+	public void Benchmark()
+	{
+		foreach (var chunk in Bytes.Chunk(1_500))
 		{
-			RunBash("screencapture -t jpg -x tmp.jpg -r");
+			Consumer.Consume(chunk[0]);
 		}
+	}
 
-		[Benchmark]
-		public void Benchmark2()
+	[Benchmark]
+	public void Benchmark2()
+	{
+		foreach (var chunk in SplitToChunks(Bytes, 1_500))
 		{
-			Screenshot();
+			Consumer.Consume(chunk[0]);
 		}
+	}
 
-		[Benchmark]
-		public void Benchmark3()
+	private static IEnumerable<byte[]> SplitToChunks(byte[] array, int chunkSize)
+	{
+		for (var i = 0; i < array.Length; i += chunkSize)
 		{
-			Screenshot2();
-		}
-
-		[DllImport("libscreenshot.dylib")]
-		private static extern void Screenshot();
-
-		[DllImport("libscreenshot.dylib")]
-		private static extern void Screenshot2();
-
-		private static void RunBash(string cmd)
-		{
-			var escapedArgs = cmd.Replace("\"", "\\\"");
-
-			var process = new Process
+			if (i + chunkSize >= array.Length)
 			{
-				StartInfo = new ProcessStartInfo
-				{
-					FileName = "/bin/bash",
-					Arguments = $"-c \"{escapedArgs}\"",
-					RedirectStandardOutput = true,
-					UseShellExecute = false,
-					CreateNoWindow = true
-				}
-			};
-			process.Start();
-			process.WaitForExit();
+				yield return array[i..];
+
+				yield break;
+			}
+
+			yield return array[i..(i + chunkSize)];
 		}
 	}
 }

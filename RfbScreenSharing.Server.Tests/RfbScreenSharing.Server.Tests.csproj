@@ -2,12 +2,22 @@
 
     <PropertyGroup>
         <OutputType>Exe</OutputType>
-        <TargetFramework>net5.0</TargetFramework>
+        <TargetFramework>net7.0</TargetFramework>
         <Nullable>enable</Nullable>
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="BenchmarkDotNet" Version="0.13.1" />
+      <PackageReference Include="BenchmarkDotNet" Version="0.13.2" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Folder Include="BenchmarkDotNet.Artifacts\results" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <None Remove="BenchmarkDotNet.Artifacts\results\RfbScreenSharing.Server.Tests.BenchmarkContainer-report-github.md" />
+      <None Remove="BenchmarkDotNet.Artifacts\RfbScreenSharing.Server.Tests.BenchmarkContainer-20221114-225103.log" />
+      <None Remove="BenchmarkDotNet.Artifacts\RfbScreenSharing.Server.Tests.BenchmarkContainer-20221114-225047.log" />
     </ItemGroup>
 
 </Project>

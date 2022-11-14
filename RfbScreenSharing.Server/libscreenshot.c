@@ -9,7 +9,7 @@ void Screenshot() {
     pid_t pid=fork();
 
     if (pid==0) { 
-        static char *argv[]={"screencapture","-t","jpg", "-x", "tmp.jpg", "-r",NULL};
+        static char *argv[]={"screencapture","-t","jpg", "-x","-r","-D","1","tmp.jpg",NULL};
         execv("/usr/sbin/screencapture",argv);
         exit(127); 
     }

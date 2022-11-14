@@ -10,85 +10,80 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace RfbScreenSharing.Server
+namespace RfbScreenSharing.Server;
+
+public partial class Server
 {
-	public class Server
+	private readonly IList<IPEndPoint> _endPoints;
+	private static readonly CancellationTokenSource Cts = new();
+
+	private Server()
 	{
-		private readonly IList<IPEndPoint> _endPoints;
+		_endPoints = new List<IPEndPoint>(1);
+	}
 
-		private Server()
-		{
-			_endPoints = new List<IPEndPoint>(1);
-		}
+	public static Task Main()
+	{
+		Console.CancelKeyPress += (_, _) => Cts.Cancel();
 
-		public static Task Main()
-		{
-			var program = new Server();
-			program.ListenForConnections();
-			return program.StartTransmissionAsync();
-		}
+		var program = new Server();
+		program.ListenForConnections();
 
-		private void ListenForConnections()
-		{
-			new Thread(
-				() =>
+		return program.StartTransmissionAsync();
+	}
+
+	private void ListenForConnections()
+	{
+		new Thread(
+			() =>
+			{
+				var registrationServer = new UdpClient(1338);
+				var endpoint = new IPEndPoint(IPAddress.Any, 0);
+				while (!Cts.IsCancellationRequested)
+				{
+					var data = registrationServer.Receive(ref endpoint);
+					if (data.Length == 1 && data[0] == 0)
 					{
-						var registrationServer = new UdpClient(1338);
-						var endpoint = new IPEndPoint(IPAddress.Any, 5001);
-						while (true)
-						{
-							var data = registrationServer.Receive(ref endpoint);
-							if (data.Length == 1 && data[0] == 0)
-							{
-								_endPoints.Remove(endpoint);
-							}
+						_endPoints.Remove(endpoint);
+					}
 
-							if (data.Length == 1 && data[0] == 1)
-							{
-								_endPoints.Add(endpoint);
-							}
-						}
-					}).Start();
-		}
-
-		private async Task StartTransmissionAsync()
-		{
-			using var server = new UdpClient();
-			server.Client.SendTimeout = 2000;
-
-			while (true)
-			{
-				if (_endPoints.Count == 0)
-				{
-					continue;
+					if (data.Length == 1 && data[0] == 1)
+					{
+						_endPoints.Add(endpoint);
+					}
 				}
+			}).Start();
+	}
 
-				var bytes = await TakeScreenshotAsync().ConfigureAwait(false);
-				var chunks = SplitToChunks(bytes, 65_507).ToList();
-				foreach (var chunk in chunks)
-				{
-					var sendTasks = _endPoints.Select(x => server.SendAsync(chunk, chunk.Length, x));
-					await Task.WhenAll(sendTasks).ConfigureAwait(false);
-				}
+	private async Task StartTransmissionAsync()
+	{
+		using var server = new UdpClient();
+		server.Client.SendTimeout = 2000;
 
-				var sendFinishedNotificationTasks = _endPoints.Select(x => server.SendAsync(Array.Empty<byte>(), 0, x));
-				await Task.WhenAll(sendFinishedNotificationTasks).ConfigureAwait(false);
-
-				//break;
-			}
-		}
-
-		private Task<byte[]> TakeScreenshotAsync()
+		while (!Cts.IsCancellationRequested)
 		{
-			if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+			if (_endPoints.Count == 0)
 			{
-				return TakeScreenshotMacAsync();
+				continue;
 			}
 
-			return TakeScreenshotInternalAsync();
+			var bytes = await TakeScreenshotAsync().ConfigureAwait(false);
+			foreach (var chunk in SplitToChunks(bytes, 1_500))
+			{
+				var sendTasks = _endPoints.Select(x => server.SendAsync(chunk, chunk.Length, x));
+				await Task.WhenAll(sendTasks).ConfigureAwait(false);
+			}
+
+			var sendFinishedNotificationTasks = _endPoints.Select(x => server.SendAsync(Array.Empty<byte>(), 0, x));
+			await Task.WhenAll(sendFinishedNotificationTasks).ConfigureAwait(false);
 		}
 
-		private async Task<byte[]> TakeScreenshotInternalAsync()
+		File.Delete("tmp.jpg");
+	}
+
+	private static async Task<byte[]> TakeScreenshotAsync()
+	{
+		if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
 		{
 			var bitmap = new Bitmap(1440, 900);
 			using var graphics = Graphics.FromImage(bitmap);
@@ -99,28 +94,26 @@ namespace RfbScreenSharing.Server
 			return stream.ToArray();
 		}
 
-		private static Task<byte[]> TakeScreenshotMacAsync()
-		{
-			Screenshot();
+		Screenshot();
 
-			return File.ReadAllBytesAsync("tmp.jpg");
-		}
-		
-		[DllImport("libscreenshot.dylib")]
-		private static extern void Screenshot();
+		return await File.ReadAllBytesAsync("tmp.jpg");
+	}
 
-		private static IEnumerable<byte[]> SplitToChunks(byte[] array, int chunkSize)
+	[LibraryImport("libscreenshot")]
+	private static partial void Screenshot();
+
+	private static IEnumerable<byte[]> SplitToChunks(byte[] array, int chunkSize)
+	{
+		for (var i = 0; i < array.Length; i += chunkSize)
 		{
-			for (var i = 0; i < array.Length; i += chunkSize)
+			if (i + chunkSize >= array.Length)
 			{
-				if (i + chunkSize >= array.Length)
-				{
-					yield return array[i..];
-					yield break;
-				}
+				yield return array[i..];
 
-				yield return array[i..(i + chunkSize)];
+				yield break;
 			}
+
+			yield return array[i..(i + chunkSize)];
 		}
 	}
 }

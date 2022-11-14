@@ -19,7 +19,10 @@
             <Label Content="Server: " />
             <TextBox Text="{Binding ServerHost, Mode=OneWayToSource}" MinWidth="200" />
         </StackPanel>
-        <Image Source="{Binding ImageSource}" Stretch="Fill" Grid.Row="1" />
-        <Button Command="{Binding StartCommand}" Content="Start" Grid.Row="2" />
+        <Image Source="{Binding ImageSource}" Stretch="Uniform" Grid.Row="1" />
+        <StackPanel Grid.Row="2" Orientation="Horizontal">
+            <Button Command="{Binding StartCommand}" Content="Start" />
+            <Button Command="{Binding StopCommand}" Content="Stop" />
+        </StackPanel>
     </Grid>
 </Window>

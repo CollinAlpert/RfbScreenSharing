@@ -3,73 +3,71 @@ using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Reactive;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Media.Imaging;
 using ReactiveUI;
 
-namespace RfbScreenSharing.Client.ViewModels
+namespace RfbScreenSharing.Client.ViewModels;
+
+public class MainWindowViewModel : ViewModelBase
 {
-	public class MainWindowViewModel : ViewModelBase
+	private IBitmap? _imageSource;
+	private CancellationTokenSource? _cts;
+
+	private static readonly byte[] RegistrationDatagram = { 1 };
+	private static readonly byte[] UnRegistrationDatagram = { 0 };
+
+	public MainWindowViewModel()
 	{
-		private IBitmap? _imageSource;
+		StartCommand = ReactiveCommand.CreateFromTask(RunAsync);
+		StopCommand = ReactiveCommand.Create(() => _cts?.Cancel());
+	}
 
-		public MainWindowViewModel()
+	public IBitmap? ImageSource
+	{
+		get => _imageSource;
+		set => this.RaiseAndSetIfChanged(ref _imageSource, value);
+	}
+
+	public string? ServerHost { get; set; }
+
+	public ReactiveCommand<Unit, Unit> StartCommand { get; set; }
+	public ReactiveCommand<Unit, Unit> StopCommand { get; set; }
+
+	private async Task RunAsync()
+	{
+		if(string.IsNullOrWhiteSpace(ServerHost))
 		{
-			StartCommand = ReactiveCommand.CreateFromTask(RunAsync);
+			throw new InvalidOperationException("Please enter a server host!");
 		}
 
-		public IBitmap? ImageSource
+		_cts = new CancellationTokenSource();
+		var client = new UdpClient();
+		var registrationEndpoint = new IPEndPoint(IPAddress.Parse(ServerHost), 1338);
+		await client.SendAsync(RegistrationDatagram, 1, registrationEndpoint).ConfigureAwait(false);
+
+		var stream = new MemoryStream();
+		while (!_cts.IsCancellationRequested)
 		{
-			get => _imageSource;
-			set
-			{
-				_imageSource = value;
-				this.RaisePropertyChanged(nameof(ImageSource));
-			}
-		}
-
-		public string? ServerHost { get; set; }
-
-		public ReactiveCommand<Unit, Unit> StartCommand { get; set; }
-
-		private async Task<int> RegisterClientAsync()
-		{
-			if(string.IsNullOrWhiteSpace(ServerHost))
-			{
-				throw new InvalidOperationException("Please enter a server host!");
-			}
-			
-			var endpoint = new IPEndPoint(IPAddress.Parse(ServerHost), 1338);
-			using var registrationEndpoint = new UdpClient();
-
-			// Register this client in the server.
-			await registrationEndpoint.SendAsync(new byte[] { 1 }, 1, endpoint).ConfigureAwait(false);
-
-			return (registrationEndpoint.Client.LocalEndPoint as IPEndPoint)!.Port;
-		}
-
-		private async Task RunAsync()
-		{
-			var port = await RegisterClientAsync().ConfigureAwait(false);
-			using var client = new UdpClient(port);
-
+			stream.SetLength(0);
 			while (true)
 			{
-				await using var stream = new MemoryStream();
-				while (true)
+				var response = await client.ReceiveAsync().ConfigureAwait(false);
+				if (response.Buffer.Length == 0)
 				{
-					var response = await client.ReceiveAsync().ConfigureAwait(false);
-					if (response.Buffer.Length == 0)
-					{
-						break;
-					}
-
-					await stream.WriteAsync(response.Buffer).ConfigureAwait(false);
+					break;
 				}
 
-				stream.Seek(0, SeekOrigin.Begin);
-				ImageSource = new Bitmap(stream);
+				await stream.WriteAsync(response.Buffer).ConfigureAwait(false);
 			}
+
+			stream.Position = 0;
+			ImageSource = new Bitmap(stream);
 		}
+
+		await stream.DisposeAsync();
+
+		await client.SendAsync(UnRegistrationDatagram, 1, registrationEndpoint).ConfigureAwait(false);
 	}
 }
